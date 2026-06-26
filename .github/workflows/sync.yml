@@ -1,0 +1,57 @@
+name: Sincronizar y publicar
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"     # cada ~5 min (GitHub puede retrasarlo en picos de carga)
+  workflow_dispatch:           # botón "Run workflow" manual
+  push:
+    branches: [main]
+    paths-ignore:
+      - "web/data.json"        # evita re-disparo por el commit de datos
+
+permissions:
+  contents: write              # commit del data.json
+  pages: write                 # publicar en Pages
+  id-token: write              # OIDC para deploy-pages
+
+concurrency:
+  group: sync-pages
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Sincronizar desde Google Drive
+        run: python scripts/sync.py
+
+      - name: Commit de data.json si cambió
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if ! git diff --quiet -- web/data.json; then
+            git add web/data.json
+            git commit -m "datos: actualización automática $(date -u +'%Y-%m-%d %H:%M UTC')"
+            git push
+          else
+            echo "Sin cambios en los datos."
+          fi
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+      - id: deploy
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,6 @@
+# datos crudos descargados (se regeneran en cada corrida; no son la fuente de verdad)
+data/raw/
+__pycache__/
+*.pyc
+.DS_Store
+scratchpad/

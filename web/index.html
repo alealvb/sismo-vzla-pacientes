@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Buscador de Pacientes — Sismo Venezuela 2026</title>
+<meta name="description" content="Buscador para localizar personas ingresadas en hospitales tras el sismo. Datos públicos agregados.">
+<style>
+  :root{
+    --bg:#0f1419; --panel:#1a2129; --panel2:#222b35; --line:#2c3742;
+    --txt:#e8edf2; --muted:#93a1b0; --accent:#4ea1ff; --accent2:#2d7dd2;
+    --ok:#43c08a; --warn:#e0a33e;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg); color:var(--txt); line-height:1.45;
+    -webkit-text-size-adjust:100%;
+  }
+  .wrap{max-width:760px; margin:0 auto; padding:18px 16px 80px}
+  header h1{font-size:1.35rem; margin:.2rem 0 .3rem; letter-spacing:.2px}
+  header p.sub{color:var(--muted); margin:.2rem 0; font-size:.9rem}
+  .stats{display:flex; gap:14px; flex-wrap:wrap; color:var(--muted); font-size:.82rem; margin:.6rem 0 .2rem}
+  .stats b{color:var(--txt)}
+  .searchbar{position:sticky; top:0; background:linear-gradient(var(--bg) 70%, transparent); padding:12px 0 8px; z-index:5}
+  #q{
+    width:100%; font-size:1.15rem; padding:14px 16px; border-radius:12px;
+    border:1.5px solid var(--line); background:var(--panel); color:var(--txt); outline:none;
+  }
+  #q:focus{border-color:var(--accent)}
+  .chips{display:flex; gap:8px; flex-wrap:wrap; margin:10px 0 2px}
+  .chip{
+    font-size:.82rem; padding:6px 11px; border-radius:999px; cursor:pointer; user-select:none;
+    border:1px solid var(--line); background:var(--panel); color:var(--muted); white-space:nowrap;
+  }
+  .chip.active{background:var(--accent2); border-color:var(--accent2); color:#fff}
+  .count{color:var(--muted); font-size:.85rem; margin:14px 2px 8px}
+  .card{
+    background:var(--panel); border:1px solid var(--line); border-radius:12px;
+    padding:13px 15px; margin-bottom:9px; display:flex; justify-content:space-between; gap:12px; align-items:flex-start;
+  }
+  .card .name{font-size:1.06rem; font-weight:600; letter-spacing:.2px}
+  .card .meta{color:var(--muted); font-size:.86rem; margin-top:3px}
+  .card .hosp{display:inline-block; margin-top:6px; font-size:.8rem; color:var(--accent); background:rgba(78,161,255,.1);
+    padding:3px 9px; border-radius:7px}
+  .age{color:var(--muted); font-size:.8rem; text-align:right; white-space:nowrap}
+  mark{background:rgba(224,163,62,.35); color:inherit; border-radius:3px; padding:0 1px}
+  .empty{color:var(--muted); text-align:center; padding:40px 10px; font-size:.95rem}
+  .notice{background:var(--panel2); border:1px solid var(--line); border-left:3px solid var(--warn);
+    border-radius:9px; padding:11px 14px; font-size:.83rem; color:var(--muted); margin:14px 0}
+  footer{color:var(--muted); font-size:.78rem; margin-top:26px; border-top:1px solid var(--line); padding-top:14px}
+  footer a{color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Buscador de Pacientes · Sismo Venezuela 2026</h1>
+    <p class="sub">Localiza a una persona ingresada en hospitales tras el sismo.</p>
+    <div class="stats">
+      <span><b id="total">…</b> personas registradas</span>
+      <span id="hospcount"></span>
+      <span>Actualizado: <b id="updated">…</b></span>
+    </div>
+  </header>
+
+  <div class="searchbar">
+    <input id="q" type="search" inputmode="search" autocomplete="off" autofocus
+           placeholder="Escribe un nombre o apellido…" aria-label="Buscar por nombre">
+    <div class="chips" id="chips"></div>
+  </div>
+
+  <div class="count" id="count"></div>
+  <div id="results"></div>
+
+  <div class="notice">
+    ⚠️ Esta es una recopilación <b>no oficial</b> de listas públicas y puede contener errores u omisiones.
+    Que un nombre <b>no aparezca</b> aquí no significa que la persona no esté ingresada. Confirma siempre
+    directamente con el hospital correspondiente.
+  </div>
+
+  <footer>
+    Datos agregados desde una carpeta pública de Google Drive del operativo del sismo.
+    Búsqueda tolerante a acentos y errores de escritura.
+    <span id="src"></span>
+  </footer>
+</div>
+
+<script>
+const norm = s => (s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().trim();
+
+// distancia de edición acotada (para tolerar erratas en consultas cortas)
+function within(a, b, max){
+  if(Math.abs(a.length-b.length)>max) return false;
+  const dp=Array.from({length:a.length+1},(_,i)=>i);
+  for(let j=1;j<=b.length;j++){
+    let prev=dp[0]; dp[0]=j; let best=dp[0];
+    for(let i=1;i<=a.length;i++){
+      const tmp=dp[i];
+      dp[i]=Math.min(dp[i]+1, dp[i-1]+1, prev+(a[i-1]===b[j-1]?0:1));
+      prev=tmp; best=Math.min(best,dp[i]);
+    }
+    if(best>max) return false;
+  }
+  return dp[a.length]<=max;
+}
+
+let DATA=[], hospitals=[], activeHosp=null;
+
+function score(p, qtokens){
+  const tokens = p._tokens;
+  let total=0;
+  for(const qt of qtokens){
+    let s=0;
+    for(const t of tokens){
+      if(t===qt){ s=Math.max(s,100); }
+      else if(t.startsWith(qt)){ s=Math.max(s,80); }
+      else if(t.includes(qt)){ s=Math.max(s,55); }
+      else if(qt.length>=3 && within(t,qt, qt.length<=5?1:2)){ s=Math.max(s,40); }
+    }
+    if(s===0) return -1;          // todos los términos deben aparecer
+    total+=s;
+  }
+  return total;
+}
+
+function hl(name, qtokens){
+  if(!qtokens.length) return name;
+  return name.split(/(\s+)/).map(w=>{
+    const nw=norm(w);
+    return qtokens.some(qt=>nw.startsWith(qt)||nw.includes(qt)) ? `<mark>${w}</mark>` : w;
+  }).join("");
+}
+
+function render(){
+  const raw=document.getElementById("q").value;
+  const qtokens=norm(raw).split(/\s+/).filter(Boolean);
+  let list=DATA;
+  if(activeHosp) list=list.filter(p=>p.hospital===activeHosp);
+  let out;
+  if(qtokens.length){
+    out=list.map(p=>[score(p,qtokens),p]).filter(x=>x[0]>=0)
+            .sort((a,b)=>b[0]-a[0]).map(x=>x[1]);
+  } else {
+    out=list;
+  }
+  const C=document.getElementById("count");
+  const R=document.getElementById("results");
+  C.textContent = qtokens.length
+      ? `${out.length} resultado(s) para “${raw.trim()}”`
+      : `Mostrando ${out.length} personas — escribe para filtrar`;
+  if(!out.length){
+    R.innerHTML=`<div class="empty">Sin coincidencias.<br>Prueba con solo el apellido o revisa la ortografía.</div>`;
+    return;
+  }
+  R.innerHTML = out.slice(0,400).map(p=>{
+    const bits=[];
+    if(p.age!=null) bits.push("Edad "+p.age);
+    if(p.sex) bits.push(p.sex==="F"?"Femenino":"Masculino");
+    if(p.origin) bits.push("Proc.: "+p.origin);
+    return `
+    <div class="card">
+      <div>
+        <div class="name">${hl(p.name,qtokens)}</div>
+        ${bits.length?`<div class="meta">${bits.join(" · ")}</div>`:""}
+        <div class="hosp">${p.hospital}</div>
+      </div>
+    </div>`;}).join("");
+  if(out.length>400) R.innerHTML+=`<div class="empty">…y ${out.length-400} más. Afina la búsqueda.</div>`;
+}
+
+function buildChips(){
+  const C=document.getElementById("chips");
+  const mk=(label,val)=>{
+    const el=document.createElement("span");
+    el.className="chip"+(activeHosp===val?" active":"");
+    el.textContent=label;
+    el.onclick=()=>{ activeHosp=(activeHosp===val?null:val); buildChips(); render(); };
+    return el;
+  };
+  C.innerHTML="";
+  C.appendChild(mk("Todos",null));
+  hospitals.forEach(([h,n])=>C.appendChild(mk(`${h.replace(/^Hospital\s+/,"")} (${n})`,h)));
+}
+
+fetch("data.json?_="+Date.now()).then(r=>r.json()).then(d=>{
+  DATA=d.patients.map(p=>({...p,_tokens:norm(p.name).split(/\s+/).filter(Boolean)}));
+  hospitals=Object.entries(d.by_hospital).sort((a,b)=>b[1]-a[1]);
+  document.getElementById("total").textContent=d.total;
+  document.getElementById("hospcount").textContent=hospitals.length+" hospitales";
+  const dt=new Date(d.generated_at);
+  document.getElementById("updated").textContent=isNaN(dt)?d.generated_at:dt.toLocaleString("es-VE");
+  document.getElementById("src").innerHTML=
+    ` · <a href="https://drive.google.com/drive/folders/${d.folder_id}" target="_blank" rel="noopener">Carpeta original</a>`;
+  buildChips(); render();
+}).catch(e=>{
+  document.getElementById("results").innerHTML=
+    `<div class="empty">No se pudo cargar la base de datos (${e}).</div>`;
+});
+
+document.getElementById("q").addEventListener("input", render);
+</script>
+</body>
+</html>

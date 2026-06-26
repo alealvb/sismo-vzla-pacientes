@@ -18,7 +18,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 
 ROOT = Path(__file__).resolve().parent.parent
-WEB = ROOT / "web"
+WEB = ROOT / "docs"          # GitHub Pages sirve el sitio desde /docs (deploy from branch)
 RAW = ROOT / "data" / "raw"
 FOLDER_ID = "1o36ifaRz45kAs5rKzci49aD0mP5JB_YI"
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36"

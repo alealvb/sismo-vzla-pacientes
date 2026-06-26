@@ -19,45 +19,53 @@ Carpeta pública de Drive
      scripts/sync.py   ── lista la carpeta, exporta los Docs a texto,
                           descarga y extrae texto de los PDFs, parsea,
                           unifica nombres de hospital, deduplica y
-                          genera  web/data.json
+                          genera  docs/data.json
                 │
                 ▼
-     web/index.html     ── buscador 100% en el navegador (sin backend)
+     docs/index.html    ── buscador 100% en el navegador (sin backend)
 ```
 
 - **Privacidad:** el número de cédula (CI) se usa solo para deduplicar y **nunca**
-  se incluye en `web/data.json`. Se publican nombre, edad, sexo, procedencia y hospital.
+  se incluye en `docs/data.json`. Se publican nombre, edad, sexo, procedencia y hospital.
 - **Cambios:** cada corrida compara contra el `data.json` anterior y reporta altas/bajas.
 
 ## Estructura
 
 | Ruta | Qué es |
 |------|--------|
-| `scripts/sync.py` | Ingesta + parseo + generación de `web/data.json` (solo stdlib + `pypdf`) |
-| `web/index.html` | Página del buscador (HTML/CSS/JS en un solo archivo) |
-| `web/data.json` | Índice generado (se versiona para tener historial de cambios) |
-| `.github/workflows/sync.yml` | Job que sincroniza y publica en GitHub Pages |
+| `scripts/sync.py` | Ingesta + parseo + generación de `docs/data.json` (solo stdlib + `pypdf`) |
+| `docs/index.html` | Página del buscador (HTML/CSS/JS en un solo archivo) |
+| `docs/data.json` | Índice generado (se versiona para tener historial de cambios) |
+| `.github/workflows/sync.yml` | Job que sincroniza los datos cada ~5 min |
 | `requirements.txt` | Dependencias de Python (`pypdf`) |
 
 ## Uso local
 
 ```bash
 pip install -r requirements.txt
-python scripts/sync.py              # genera web/data.json
-cd web && python3 -m http.server 8765
+python scripts/sync.py              # genera docs/data.json
+cd docs && python3 -m http.server 8765
 # abrir http://localhost:8765
 ```
 
-## Despliegue (GitHub Pages + Actions)
+## Despliegue
 
-1. Crear el repo y subir el código (ver comandos abajo).
-2. En **Settings → Pages → Build and deployment → Source**, elegir **GitHub Actions**.
-3. El workflow corre cada ~5 min (y se puede lanzar a mano desde la pestaña **Actions →
-   Sincronizar y publicar → Run workflow**). En cada corrida: sincroniza, hace commit de
-   `web/data.json` si cambió y republica el sitio.
+**Sitio (GitHub Pages, sin Actions):** en **Settings → Pages → Build and deployment**,
+elegir **Deploy from a branch**, rama `main`, carpeta `/docs`. El sitio queda en
+`https://<usuario>.github.io/<repo>/` y se republica solo en cada push a `docs/`.
+No requiere GitHub Actions ni facturación.
+
+**Actualización automática (job):** el workflow `sync.yml` corre cada ~5 min (y a mano
+desde **Actions → Sincronizar datos → Run workflow**), regenera `docs/data.json` y lo
+commitea si cambió; Pages republica solo.
+
+> Requiere que **GitHub Actions** esté habilitado en la cuenta. Si la cuenta tiene un
+> bloqueo de facturación, los runs fallan con *"account is locked due to a billing issue"*;
+> hay que resolverlo en **Settings → Billing**. Mientras tanto, se puede correr
+> `python scripts/sync.py` localmente (o por `cron`) y hacer `git push` para actualizar.
 
 > Nota: el cron de GitHub Actions tiene granularidad de ~5 min y puede retrasarse en
-> momentos de alta carga de la plataforma. Es el límite práctico del plan gratuito.
+> momentos de alta carga de la plataforma.
 
 ## Aviso
 

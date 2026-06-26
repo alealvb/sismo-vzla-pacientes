@@ -54,8 +54,10 @@
   #q{width:100%;font-size:1.15rem;padding:14px 16px;border-radius:12px;border:1.5px solid var(--line);
     background:var(--panel);color:var(--txt);outline:none}
   #q:focus{border-color:var(--accent)}
-  .chips{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 2px}
-  .chip{font-size:.82rem;padding:6px 11px;border-radius:999px;cursor:pointer;user-select:none;
+  .chips{display:flex;gap:8px;margin:10px 0 2px;overflow-x:auto;flex-wrap:nowrap;
+    -webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px}
+  .chips::-webkit-scrollbar{display:none}
+  .chip{flex:0 0 auto;font-size:.82rem;padding:6px 11px;border-radius:999px;cursor:pointer;user-select:none;
     border:1px solid var(--line);background:var(--panel);color:var(--muted);white-space:nowrap}
   .chip.active{background:var(--accent2);border-color:var(--accent2);color:#fff}
   .count{color:var(--muted);font-size:.85rem;margin:14px 2px 8px}

@@ -268,7 +268,10 @@ def merge(records):
         if not r["name"] or len(r["name"]) < 4:
             continue
         ci = (r.get("ci") or "").strip()
-        key = ci if ci else strip_accents(r["name"]).lower() + "|" + strip_accents(r["hospital"]).lower()
+        # dedup: por cédula si existe; si no, por tokens del nombre ORDENADOS + hospital
+        # (así "GONZALEZ RAFAEL" y "Rafael Gonzalez" colapsan al mismo registro).
+        toks = " ".join(sorted(strip_accents(r["name"]).lower().split()))
+        key = ci if ci else toks + "|" + strip_accents(r["hospital"]).lower()
         rid = hashlib.sha1(key.encode()).hexdigest()[:10]
         cur = out.get(rid)
         if cur is None:

@@ -1,12 +1,26 @@
 #!/usr/bin/env bash
-# Sincroniza desde Drive y publica si hay cambios. Úsalo a mano o por cron.
-# Cron cada 5 min (crontab -e):
+# Sincroniza desde Drive (texto + OCR de imágenes) y publica si hay cambios.
+# Úsalo a mano o por cron. Cron cada 5 min (crontab -e):
 #   */5 * * * * /home/alejo/projects/terremoto-venezuela/scripts/update.sh >> /tmp/sismo-sync.log 2>&1
 set -euo pipefail
 cd "$(dirname "$0")/.."
+export PATH="$HOME/.local/ollama/bin:$PATH"
+
+# 1) Asegura el servidor de Ollama (modelo de visión para OCR de fotos)
+if ! curl -s http://localhost:11434/api/version >/dev/null 2>&1; then
+  nohup ollama serve >/tmp/ollama.log 2>&1 &
+  sleep 5
+fi
+
+# 2) OCR de imágenes nuevas (cacheado por hash; las ya vistas no se reprocesan)
+python3 scripts/ocr_images.py || echo "(OCR omitido / sin Ollama)"
+
+# 3) Fusiona todas las fuentes y regenera docs/data.json
 python3 scripts/sync.py
+
+# 4) Publica si cambió (Pages republica solo desde /docs)
 if ! git diff --quiet -- docs/data.json; then
-  git add docs/data.json
+  git add docs/data.json docs/sitemap.xml data/manual/ocr-images.json
   git commit -m "datos: actualización $(date -u +'%Y-%m-%d %H:%M UTC')"
   git push
   echo "Actualizado y publicado."

@@ -1,0 +1,42 @@
+{
+ "_nota": "Info de contacto por hospital. El link de Maps siempre da dirección, teléfono y cómo llegar. Agrega teléfonos verificados en 'phone' cuando los confirmes.",
+ "Hospital Universitario de Caracas": {
+   "address": "Ciudad Universitaria, Urb. Los Chaguaramos, Caracas",
+   "phone": "(0212) 606-7192",
+   "web": "https://www.huc.gob.ve",
+   "maps": "https://www.google.com/maps/search/?api=1&query=Hospital+Universitario+de+Caracas"
+ },
+ "Hospital Domingo Luciani (El Llanito)": {
+   "address": "El Llanito, Petare, Caracas (IVSS)",
+   "maps": "https://www.google.com/maps/search/?api=1&query=Hospital+Dr+Domingo+Luciani+El+Llanito+Caracas"
+ },
+ "Hospital Pérez Carreño": {
+   "address": "Av. Intercomunal del Valle / Catia, Caracas (IVSS)",
+   "maps": "https://www.google.com/maps/search/?api=1&query=Hospital+Dr+Miguel+Perez+Carreno+Caracas"
+ },
+ "Hospital Vargas de Caracas": {
+   "address": "San José, Caracas",
+   "maps": "https://www.google.com/maps/search/?api=1&query=Hospital+Vargas+de+Caracas+San+Jose"
+ },
+ "Hospital José María Vargas (La Guaira)": {
+   "address": "La Guaira, estado La Guaira",
+   "maps": "https://www.google.com/maps/search/?api=1&query=Hospital+Jose+Maria+Vargas+La+Guaira"
+ },
+ "Hospital Ricardo Baquero González": {
+   "address": "Periférico de Catia, Caracas",
+   "maps": "https://www.google.com/maps/search/?api=1&query=Hospital+Periferico+de+Catia+Ricardo+Baquero+Gonzalez"
+ },
+ "Hospital J. M. de los Ríos (pediátrico)": {
+   "address": "San Bernardino, Caracas",
+   "maps": "https://www.google.com/maps/search/?api=1&query=Hospital+J+M+de+los+Rios+San+Bernardino+Caracas"
+ },
+ "Hospital Militar Carlos Arvelo": {
+   "address": "San Martín, Caracas",
+   "maps": "https://www.google.com/maps/search/?api=1&query=Hospital+Militar+Carlos+Arvelo+Caracas"
+ },
+ "Refugio: Campo de Golf Playa Los Cocos": {
+   "address": "Caraballeda, estado La Guaira",
+   "note": "Punto de concentración/refugio de personas, no es un hospital.",
+   "maps": "https://www.google.com/maps/search/?api=1&query=Campo+de+Golf+Caraballeda+La+Guaira"
+ }
+}

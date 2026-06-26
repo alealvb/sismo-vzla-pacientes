@@ -132,8 +132,8 @@ def main():
                 n_new += 1
                 print(f"    OCR {dest.split(':')[0][:22]:22} {it['name'][:34]:34} -> {len(recs)}", file=sys.stderr)
             for r in recs:
-                r2 = dict(r, hospital=dest)
-                all_records.append(r2)
+                all_records.append(dict(r, hospital=dest, source="Foto: " + it["name"],
+                                        source_id=it["id"], source_kind="image"))
             stats[dest] = stats.get(dest, 0) + len(recs)
 
     OUT.write_text(json.dumps({"source": "OCR fotos (Qwen2.5-VL local)", "patients": all_records},

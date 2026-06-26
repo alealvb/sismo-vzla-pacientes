@@ -115,14 +115,32 @@ def split_trailing_location(name):
     return name, loc
 
 
+HEADER_WORDS = {"nombre", "apellido", "cama", "piso", "sala", "area", "trauma", "shock",
+                "servicio", "edad", "total", "masculino", "femenino", "pediatria",
+                "hospital", "ingresados", "traumatologia", "cirugia", "observacion"}
+
+
 def clean_name(name):
-    name = re.sub(r"\s+", " ", name).strip(" .)-")
+    name = name or ""
+    # quita anotaciones que el OCR/transcripción pega al nombre
+    name = re.sub(r"\(\s*menor[^)]*\)?|\bmenor\b\)?", " ", name, flags=re.I)   # (menor)
+    name = re.sub(r"\(\s*\d{1,3}\s*\)", " ", name)                            # (62)
+    name = re.sub(r"\b\d{1,3}\s*a[nñ]os?\b", " ", name, flags=re.I)           # 42 años
+    name = re.sub(r"[-–]\s*\w*#?\d*\s*$", " ", name)                          # - 4149 / - CG#
+    name = re.sub(r"\bP\.?\d\b", " ", name)                                   # P.2 / P2
+    name = re.sub(r"[()#/]", " ", name)                                       # paréntesis/#/ sueltos
+    name = re.sub(r"\b\d{1,4}\b", " ", name)                                  # números residuales
+    name = re.sub(r"\s+", " ", name).strip(" .,-")
     toks, out = name.split(), []
     for t in toks:
-        if not out or out[-1] != t:
+        if not out or out[-1].lower() != t.lower():
             out.append(t)
     if len(out) >= 2 and len(out) % 2 == 0 and out[: len(out)//2] == out[len(out)//2:]:
         out = out[: len(out)//2]
+    # descarta encabezados de tabla (p.ej. "Nombre Apellido", "Cama", "Trauma Shock")
+    low = [strip_accents(t).lower() for t in out]
+    if out and all(w in HEADER_WORDS for w in low):
+        return ""
     return " ".join(out)
 
 
@@ -255,7 +273,8 @@ def load_manual():
                 continue
             records.append({"name": clean_name(r["name"]), "age": r.get("age"), "hospital": hosp,
                             "sex": r.get("sex"), "origin": r.get("origin"), "estado": r.get("estado"),
-                            "ci": r.get("ci"), "source": src})
+                            "ci": r.get("ci"), "source": r.get("source", src),
+                            "source_id": r.get("source_id"), "source_kind": r.get("source_kind", "image")})
             n += 1
         files.append({"name": src, "records": n, "type": "imagen"})
     return records, files
@@ -275,11 +294,15 @@ def merge(records):
         rid = hashlib.sha1(key.encode()).hexdigest()[:10]
         cur = out.get(rid)
         if cur is None:
-            out[rid] = {k: r.get(k) for k in ("name", "age", "hospital", "sex", "origin", "estado")}
+            out[rid] = {k: r.get(k) for k in ("name", "age", "hospital", "sex", "origin", "estado",
+                                              "source", "source_id", "source_kind")}
         else:
             for f in ("age", "sex", "origin", "estado"):
                 if not cur.get(f) and r.get(f):
                     cur[f] = r.get(f)
+            if not cur.get("source_id") and r.get("source_id"):
+                cur["source"], cur["source_id"], cur["source_kind"] = \
+                    r.get("source"), r.get("source_id"), r.get("source_kind")
     return list(out.values())
 
 
@@ -321,6 +344,9 @@ def main():
                     recs = parse_consolidated_pdf(txt, d["name"]); kind = "pdf"
         except Exception as e:
             print(f"  ! {d['name'][:46]}: {e}", file=sys.stderr); continue
+        for r in recs:
+            r["source_id"] = d["id"]
+            r["source_kind"] = "gdoc" if d["type"] == "gdoc" else "pdf"
         h = hashlib.sha1(txt.encode("utf-8", "replace")).hexdigest()
         (RAW / f"{d['id']}.txt").write_text(txt, encoding="utf-8")
         print(f"  {kind:8} {d['name'][:46]:46} -> {len(recs):4} reg", file=sys.stderr)
@@ -340,12 +366,41 @@ def main():
     hosp_list = sorted({p["hospital"] for p in patients})
     hidx = {h: i for i, h in enumerate(hosp_list)}
     by_hosp = {h: 0 for h in hosp_list}
+
+    def src_url(kind, sid):
+        if not sid:
+            return None
+        if kind == "gdoc":
+            return f"https://docs.google.com/document/d/{sid}"
+        return f"https://drive.google.com/file/d/{sid}/view"  # pdf / imagen
+
+    src_index, src_list = {}, []  # arreglo único de fuentes con URL a Drive
+    def src_idx(p):
+        sid = p.get("source_id")
+        if not sid:
+            return -1
+        key = (p.get("source_kind"), sid)
+        if key not in src_index:
+            src_index[key] = len(src_list)
+            src_list.append({"l": p.get("source") or "Fuente", "u": src_url(p.get("source_kind"), sid)})
+        return src_index[key]
+
     rows = []
     for p in patients:
         by_hosp[p["hospital"]] += 1
-        # fila compacta: [nombre, idxHospital, edad|0, sexo|"", procedencia|"", estado|""]
+        # fila compacta: [nombre, idxHosp, edad|0, sexo|"", proc|"", estado|"", idxFuente]
         rows.append([p["name"], hidx[p["hospital"]], p["age"] or 0,
-                     p["sex"] or "", p["origin"] or "", p["estado"] or ""])
+                     p["sex"] or "", p["origin"] or "", p["estado"] or "", src_idx(p)])
+
+    # info de contacto por hospital (data/hospitals.json), alineada a hosp_list
+    hinfo = {}
+    hfile = ROOT / "data" / "hospitals.json"
+    if hfile.exists():
+        try:
+            hinfo = json.loads(hfile.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    hospital_info = [hinfo.get(h, {}) for h in hosp_list]
 
     out = {
         "v": 2,
@@ -354,17 +409,22 @@ def main():
         "total": len(rows),
         "hospitals": hosp_list,
         "by_hospital": [by_hosp[h] for h in hosp_list],
-        "sources": sources,
+        "hospital_info": hospital_info,
+        "sources": src_list,
         "rows": rows,
     }
 
     prev_file = WEB / "data.json"
+    sig = lambda o: {k: v for k, v in o.items() if k != "generated_at"}  # ignora timestamp
     if prev_file.exists():
         try:
             prev = json.loads(prev_file.read_text(encoding="utf-8"))
             pn = {r[0] + str(r[1]) for r in prev.get("rows", [])}
             nn = {r[0] + str(r[1]) for r in rows}
             print(f"  cambios: +{len(nn - pn)} nuevos, -{len(pn - nn)} retirados", file=sys.stderr)
+            if sig(prev) == sig(out):
+                print("Sin cambios en los datos: no se reescribe data.json.", file=sys.stderr)
+                return
         except Exception:
             pass
 

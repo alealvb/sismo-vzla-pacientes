@@ -69,7 +69,23 @@
   .estado{display:inline-block;margin-top:7px;margin-left:6px;font-size:.78rem;padding:3px 9px;border-radius:7px;
     background:rgba(224,163,62,.14);color:var(--warn)}
   .estado.mourn{background:rgba(196,107,107,.16);color:var(--mourn)}
+  .hosp{cursor:pointer}
+  .srclink{display:inline-block;margin-top:7px;margin-left:6px;font-size:.78rem;color:var(--muted);text-decoration:none}
+  .srclink:hover{color:var(--accent)}
   mark{background:rgba(224,163,62,.35);color:inherit;border-radius:3px;padding:0 1px}
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;
+    justify-content:center;padding:18px;z-index:50}
+  .modal[hidden]{display:none}
+  .modal-box{background:var(--panel);border:1px solid var(--line);border-radius:14px;max-width:420px;
+    width:100%;padding:20px 20px 8px;position:relative}
+  .modal-box h3{margin:.1rem 0 .8rem;font-size:1.1rem;padding-right:28px}
+  .modal-box p{margin:.5rem 0;font-size:.92rem}
+  .modal-box a{color:var(--accent)}
+  .modal-box .muted{color:var(--muted);font-size:.85rem}
+  .modal-x{position:absolute;top:10px;right:12px;background:none;border:none;color:var(--muted);
+    font-size:1.3rem;cursor:pointer;line-height:1}
+  .btn{display:inline-block;background:var(--accent2);color:#fff;padding:9px 14px;border-radius:9px;
+    text-decoration:none;font-size:.9rem;margin-top:4px}
   .empty{color:var(--muted);text-align:center;padding:40px 10px;font-size:.95rem}
   .notice{background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--warn);
     border-radius:9px;padding:11px 14px;font-size:.83rem;color:var(--muted);margin:14px 0}
@@ -98,6 +114,14 @@
 
   <div class="count" id="count"></div>
   <div id="results"></div>
+
+  <div id="modal" class="modal" hidden onclick="if(event.target===this)closeHosp()">
+    <div class="modal-box">
+      <button class="modal-x" onclick="closeHosp()" aria-label="Cerrar">✕</button>
+      <h3 id="m-name"></h3>
+      <div id="m-body"></div>
+    </div>
+  </div>
   <noscript><p class="empty">Esta página necesita JavaScript para buscar. Activa JavaScript en tu navegador.</p></noscript>
 
   <div class="notice">
@@ -121,7 +145,7 @@ function within(a,b,max){if(Math.abs(a.length-b.length)>max)return false;
     if(best>max)return false;}
   return dp[a.length]<=max;}
 
-let DATA=[],HOSP=[],hospStats=[],activeHosp=null;
+let DATA=[],HOSP=[],HINFO=[],SOURCES=[],hospStats=[],activeHosp=null;
 
 function score(p,qt){let total=0;
   for(const q of qt){let s=0;
@@ -158,9 +182,10 @@ function render(){
     if(p.origin)bits.push("Proc.: "+esc(p.origin));
     const mourn=/fallec/i.test(p.estado||"");
     const est=p.estado?`<span class="estado${mourn?" mourn":""}">${esc(p.estado)}</span>`:"";
+    const src=(p.src>=0&&SOURCES[p.src])?`<a class="srclink" href="${esc(SOURCES[p.src].u)}" target="_blank" rel="noopener" title="Ver el archivo original en Google Drive">🔗 fuente</a>`:"";
     return `<div class="card"><div class="name">${hl(esc(p.name),qt)}</div>
       ${bits.length?`<div class="meta">${bits.join(" · ")}</div>`:""}
-      <span class="hosp">${esc(HOSP[p.h])}</span>${est}</div>`;}).join("");
+      <span class="hosp" role="button" tabindex="0" onclick="showHosp(${p.h})" title="Ver dirección y contacto">${esc(HOSP[p.h])} ⓘ</span>${est}${src}</div>`;}).join("");
   if(out.length>400)R.innerHTML+=`<div class="empty">…y ${out.length-400} más. Afina la búsqueda.</div>`;
 }
 
@@ -175,9 +200,9 @@ function buildChips(){
 
 // Sin cache-buster: el navegador revalida con ETag (304 = casi 0 bytes) — ideal para baja conexión.
 fetch("data.json").then(r=>r.json()).then(d=>{
-  HOSP=d.hospitals;
+  HOSP=d.hospitals; HINFO=d.hospital_info||[]; SOURCES=d.sources||[];
   DATA=d.rows.map(r=>({name:r[0],h:r[1],age:r[2]||null,sex:r[3]||null,origin:r[4]||null,estado:r[5]||null,
-    _t:norm(r[0]).split(/\s+/).filter(Boolean)}));
+    src:(r[6]==null?-1:r[6]),_t:norm(r[0]).split(/\s+/).filter(Boolean)}));
   hospStats=(d.by_hospital||[]).map((n,i)=>[i,n]).sort((a,b)=>b[1]-a[1]);
   document.getElementById("total").textContent=d.total;
   document.getElementById("hospcount").textContent=HOSP.length+" hospitales";
@@ -192,6 +217,22 @@ fetch("data.json").then(r=>r.json()).then(d=>{
   `<div class="empty">No se pudo cargar la base de datos (${e}).</div>`;});
 
 document.getElementById("q").addEventListener("input",render);
+
+function showHosp(i){
+  const info=HINFO[i]||{}, name=HOSP[i], b=[];
+  document.getElementById("m-name").textContent=name;
+  if(info.address)b.push(`<p>📍 ${esc(info.address)}</p>`);
+  if(info.note)b.push(`<p class="muted">${esc(info.note)}</p>`);
+  if(info.phone)b.push(`<p>📞 <a href="tel:${esc((info.phone||"").replace(/[^0-9+]/g,""))}">${esc(info.phone)}</a></p>`);
+  if(info.web)b.push(`<p>🌐 <a href="${esc(info.web)}" target="_blank" rel="noopener">${esc(info.web)}</a></p>`);
+  if(info.maps)b.push(`<p><a class="btn" href="${esc(info.maps)}" target="_blank" rel="noopener">🗺️ Cómo llegar (Google Maps)</a></p>`);
+  if(!info.phone&&!info.web&&!info.maps&&!info.address)
+    b.push(`<p class="muted">Sin datos de contacto registrados. Comunícate con información hospitalaria.</p>`);
+  document.getElementById("m-body").innerHTML=b.join("");
+  document.getElementById("modal").hidden=false;
+}
+function closeHosp(){document.getElementById("modal").hidden=true;}
+document.addEventListener("keydown",e=>{if(e.key==="Escape")closeHosp();});
 </script>
 </body>
 </html>

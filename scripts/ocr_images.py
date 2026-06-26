@@ -136,6 +136,18 @@ def main():
                                         source_id=it["id"], source_kind="image"))
             stats[dest] = stats.get(dest, 0) + len(recs)
 
+    # Guarda anti-encogimiento: si una corrida produce muchos menos registros que la
+    # anterior (p.ej. listado de Drive falló transitoriamente), conserva la versión previa.
+    if OUT.exists():
+        try:
+            old_n = len(json.loads(OUT.read_text(encoding="utf-8")).get("patients", []))
+            if len(all_records) < old_n * 0.8:
+                print(f"  ! OCR dio {len(all_records)} < {old_n} previos (posible fallo "
+                      f"transitorio): conservo el anterior y no sobrescribo.", file=sys.stderr)
+                return
+        except Exception:
+            pass
+
     OUT.write_text(json.dumps({"source": "OCR fotos (Qwen2.5-VL local)", "patients": all_records},
                               ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"\nOCR: {n_new} imágenes nuevas, {n_cached} desde caché. "

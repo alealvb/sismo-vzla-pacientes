@@ -6,6 +6,16 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 export PATH="$HOME/.local/ollama/bin:$PATH"
 
+# Lock: evita que dos corridas (cron + manual, o cron solapado) se pisen.
+exec 9>/tmp/sismo-sync.lock
+flock -n 9 || { echo "Ya hay una sincronización en curso; salgo."; exit 0; }
+
+# Si el árbol de trabajo está sucio (edición en curso), no toques nada.
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  echo "Cambios sin commitear en el repo; salto esta corrida para no pisar trabajo."; exit 0
+fi
+git pull -q --rebase --autostash origin main || true
+
 # 1) Asegura el servidor de Ollama (modelo de visión para OCR de fotos)
 if ! curl -s http://localhost:11434/api/version >/dev/null 2>&1; then
   nohup ollama serve >/tmp/ollama.log 2>&1 &
